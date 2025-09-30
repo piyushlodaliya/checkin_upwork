@@ -1,5 +1,5 @@
 //
-//  ContentView.swift
+//  PublicView.swift
 //  cheakin
 //
 //  Created by Arnav Gupta on 9/29/25.
@@ -7,18 +7,19 @@
 
 import SwiftUI
 
-struct ContentView: View {
+struct PublicView: View {
     var body: some View {
         VStack {
             Image(systemName: "globe")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
-            Text("Hello, world!")
+            Text("Public")
+                .font(.title)
         }
         .padding()
     }
 }
 
 #Preview {
-    ContentView()
+    PublicView()
 }
