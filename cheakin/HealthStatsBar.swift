@@ -1,36 +1,49 @@
-//
-//  HealthStatsBar.swift
-//  cheakin
-//
-//  Created by Arnav Gupta on 9/29/25.
-//
-
 import SwiftUI
-import HealthKit
-import Combine
 
 struct HealthStatsBar: View {
-    @StateObject private var healthManager = HealthKitManager()
+    @EnvironmentObject var healthManager: HealthKitManager
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                StatCapsule(icon: "figure.walk", value: "\(healthManager.steps)", color: .green)
-                StatCapsule(icon: "heart.fill", value: "\(healthManager.heartRate)", color: .red)
-                StatCapsule(icon: "heart.circle", value: "\(healthManager.restingHeartRate)", color: .pink)
-                StatCapsule(icon: "flame.fill", value: "\(healthManager.activeCalories)", color: .orange)
-                StatCapsule(icon: "figure.run", value: "\(healthManager.distance)", color: .cyan)
-                StatCapsule(icon: "stairs", value: "\(healthManager.flightsClimbed)", color: .purple)
-                StatCapsule(icon: "lungs.fill", value: "\(healthManager.vo2Max)", color: .blue)
-                StatCapsule(icon: "bolt.fill", value: "\(healthManager.workoutMinutes)", color: .yellow)
-                StatCapsule(icon: "bed.double.fill", value: healthManager.sleepHours, color: .indigo)
-                StatCapsule(icon: "wind", value: "\(healthManager.respiratoryRate)", color: .teal)
+                if healthManager.metrics.isEmpty {
+                    Text("Loading health data...")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                        .padding(.horizontal)
+                } else {
+                    ForEach(healthManager.metrics) { metric in
+                        StatCapsule(
+                            icon: metric.icon,
+                            value: metric.value,
+                            color: colorFromString(metric.color)
+                        )
+                    }
+                }
             }
             .padding(.horizontal)
         }
         .frame(height: 60)
         .onAppear {
-            healthManager.requestAuthorization()
+            if healthManager.isAuthorized && healthManager.metrics.isEmpty {
+                healthManager.fetchAllAvailableMetrics()
+            }
+        }
+    }
+    
+    private func colorFromString(_ colorName: String) -> Color {
+        switch colorName {
+        case "green": return .green
+        case "red": return .red
+        case "pink": return .pink
+        case "orange": return .orange
+        case "cyan": return .cyan
+        case "purple": return .purple
+        case "blue": return .blue
+        case "yellow": return .yellow
+        case "indigo": return .indigo
+        case "teal": return .teal
+        default: return .gray
         }
     }
 }
@@ -56,8 +69,4 @@ struct StatCapsule: View {
                 .fill(color.opacity(0.15))
         )
     }
-}
-
-#Preview {
-    HealthStatsBar()
 }

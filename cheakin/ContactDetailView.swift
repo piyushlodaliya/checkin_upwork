@@ -10,28 +10,23 @@ import Lottie
 
 struct ContactDetailView: View {
     let contact: Contact
+    @EnvironmentObject var healthManager: HealthKitManager
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                // Name header
+            VStack(spacing: 12) {
                 Text(contact.name)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
-
-                HealthStatsBar()
+                    .padding(.top, 8)
 
                 EmotionalTimeline()
 
                 CardFeedView()
                     .frame(height: 280)
-                    .padding(.top, 12)
 
                 MusicWidget()
-                    .padding(.top, 12)
 
                 Spacer(minLength: 80)
             }
@@ -43,5 +38,6 @@ struct ContactDetailView: View {
 #Preview {
     NavigationView {
         ContactDetailView(contact: Contact(name: "Sarah", emotion: "happy-cry", profileColor: "#FF6B6B"))
+            .environmentObject(HealthKitManager())
     }
 }

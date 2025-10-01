@@ -1,18 +1,14 @@
-//
-//  HomeView.swift
-//  cheakin
-//
-//  Created by Arnav Gupta on 9/29/25.
-//
-
 import SwiftUI
 import Lottie
 
 struct HomeView: View {
+    @EnvironmentObject var healthManager: HealthKitManager
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 HealthStatsBar()
+                    .environmentObject(healthManager)
 
                 EmotionalTimeline()
 
@@ -31,4 +27,5 @@ struct HomeView: View {
 
 #Preview {
     HomeView()
+        .environmentObject(HealthKitManager())
 }

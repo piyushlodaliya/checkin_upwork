@@ -1,260 +1,329 @@
-//
-//  HealthKitManager.swift
-//  cheakin
-//
-//  Created by Arnav Gupta on 9/29/25.
-//
-
 import Foundation
 import HealthKit
 import Combine
 
 class HealthKitManager: ObservableObject {
     let healthStore = HKHealthStore()
-
-    @Published var heartRate: Int = 0
-    @Published var restingHeartRate: Int = 0
-    @Published var steps: Int = 0
-    @Published var activeCalories: Int = 0
-    @Published var distance: String = "0"
-    @Published var flightsClimbed: Int = 0
-    @Published var vo2Max: Int = 0
-    @Published var workoutMinutes: Int = 0
-    @Published var sleepHours: String = "0h"
-    @Published var respiratoryRate: Int = 0
+    
+    @Published var metrics: [HealthMetric] = []
     @Published var isAuthorized = false
-
+    
+    private var refreshTimer: Timer?
+    
+    func startAutoRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            if self?.isAuthorized == true {
+                print("🔄 Auto-refreshing health data...")
+                self?.fetchAllAvailableMetrics()
+            }
+        }
+    }
+    
+    func stopAutoRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+    
     func requestAuthorization() {
         guard HKHealthStore.isHealthDataAvailable() else {
-            print("HealthKit not available on this device")
+            print("❌ HealthKit not available on this device")
             return
         }
 
-        let readTypes: Set<HKObjectType> = [
-            HKObjectType.quantityType(forIdentifier: .heartRate)!,
-            HKObjectType.quantityType(forIdentifier: .restingHeartRate)!,
-            HKObjectType.quantityType(forIdentifier: .stepCount)!,
-            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
-            HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
-            HKObjectType.quantityType(forIdentifier: .flightsClimbed)!,
-            HKObjectType.quantityType(forIdentifier: .vo2Max)!,
-            HKObjectType.quantityType(forIdentifier: .appleExerciseTime)!,
-            HKObjectType.quantityType(forIdentifier: .respiratoryRate)!,
-            HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
-        ]
+        let allQuantityTypes = getAllQuantityTypes()
+        let allCategoryTypes = getAllCategoryTypes()
+        let readTypes = Set(allQuantityTypes + allCategoryTypes)
+        
+        print("🔍 Requesting authorization for \(readTypes.count) health types")
 
         healthStore.requestAuthorization(toShare: nil, read: readTypes) { [weak self] success, error in
+            print("✅ HealthKit authorization: \(success)")
+            if let error = error {
+                print("❌ Error: \(error.localizedDescription)")
+            }
             DispatchQueue.main.async {
+                self?.isAuthorized = success
                 if success {
-                    self?.isAuthorized = true
-                    self?.fetchHealthData()
-                    self?.startObservingHealthData()
-                } else {
-                    print("HealthKit authorization failed: \(error?.localizedDescription ?? "unknown error")")
+                    print("🎉 Fetching health data...")
+                    self?.fetchAllAvailableMetrics()
+                    self?.startAutoRefresh()
                 }
             }
         }
     }
-
-    func fetchHealthData() {
-        fetchHeartRate()
-        fetchRestingHeartRate()
-        fetchSteps()
-        fetchActiveCalories()
-        fetchDistance()
-        fetchFlightsClimbed()
-        fetchVO2Max()
-        fetchWorkoutMinutes()
-        fetchSleep()
-        fetchRespiratoryRate()
-    }
-
-    // Set up live observers for real-time updates
-    func startObservingHealthData() {
-        observeSteps()
-        observeHeartRate()
-    }
-
-    private func observeSteps() {
-        guard let stepsType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
-
-        let query = HKObserverQuery(sampleType: stepsType, predicate: nil) { [weak self] _, _, error in
-            if error == nil {
-                self?.fetchSteps()
+    
+    func fetchAllAvailableMetrics() {
+        let allTypes = getAllQuantityTypes()
+        var fetchedMetrics: [HealthMetric] = []
+        
+        let group = DispatchGroup()
+        
+        for type in allTypes {
+            group.enter()
+            if shouldUseCumulativeSum(for: type) {
+                fetchCumulativeValue(for: type) { metric in
+                    if let metric = metric {
+                        fetchedMetrics.append(metric)
+                        print("📊 Found: \(metric.name) = \(metric.value)")
+                    }
+                    group.leave()
+                }
+            } else {
+                fetchMostRecentValue(for: type) { metric in
+                    if let metric = metric {
+                        fetchedMetrics.append(metric)
+                        print("📊 Found: \(metric.name) = \(metric.value)")
+                    }
+                    group.leave()
+                }
             }
+        }
+        
+        group.notify(queue: .main) {
+            self.metrics = fetchedMetrics.sorted { $0.name < $1.name }
+            print("✅ Total metrics fetched: \(self.metrics.count)")
+        }
+    }
+    
+    private func shouldUseCumulativeSum(for type: HKQuantityType) -> Bool {
+        let cumulativeTypes: [String] = [
+            HKQuantityTypeIdentifier.stepCount.rawValue,
+            HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue,
+            HKQuantityTypeIdentifier.distanceCycling.rawValue,
+            HKQuantityTypeIdentifier.distanceSwimming.rawValue,
+            HKQuantityTypeIdentifier.activeEnergyBurned.rawValue,
+            HKQuantityTypeIdentifier.flightsClimbed.rawValue,
+            HKQuantityTypeIdentifier.appleExerciseTime.rawValue,
+            HKQuantityTypeIdentifier.swimmingStrokeCount.rawValue
+        ]
+        return cumulativeTypes.contains(type.identifier)
+    }
+    
+    private func fetchCumulativeValue(for type: HKQuantityType, completion: @escaping (HealthMetric?) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+        
+        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
+            if let error = error {
+                print("❌ Error fetching cumulative \(type.identifier): \(error.localizedDescription)")
+                completion(nil)
+                return
+            }
+            
+            guard let sum = statistics?.sumQuantity() else {
+                completion(nil)
+                return
+            }
+            
+            let unit = self.getUnit(for: type)
+            let value = sum.doubleValue(for: unit)
+            let displayValue = self.formatValue(value, unit: unit, identifier: type.identifier)
+            let (icon, color) = self.getIconAndColor(for: type.identifier)
+            let name = self.getReadableName(for: type.identifier)
+            
+            let metric = HealthMetric(
+                name: name,
+                value: displayValue,
+                icon: icon,
+                color: color,
+                identifier: type.identifier
+            )
+            completion(metric)
         }
         healthStore.execute(query)
     }
-
-    private func observeHeartRate() {
-        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return }
-
-        let query = HKObserverQuery(sampleType: heartRateType, predicate: nil) { [weak self] _, _, error in
-            if error == nil {
-                self?.fetchHeartRate()
-            }
-        }
-        healthStore.execute(query)
-    }
-
-    private func fetchHeartRate() {
-        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return }
-
+    
+    private func fetchMostRecentValue(for type: HKQuantityType, completion: @escaping (HealthMetric?) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+        
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: heartRateType, predicate: nil, limit: 1, sortDescriptors: [sortDescriptor]) { [weak self] _, results, error in
-            guard let sample = results?.first as? HKQuantitySample else { return }
-            let bpm = Int(sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
-            DispatchQueue.main.async {
-                self?.heartRate = bpm
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1, sortDescriptors: [sortDescriptor]) { _, results, error in
+            if let error = error {
+                print("❌ Error fetching \(type.identifier): \(error.localizedDescription)")
+                completion(nil)
+                return
             }
+            
+            guard let sample = results?.first as? HKQuantitySample else {
+                completion(nil)
+                return
+            }
+            
+            let metric = self.createMetric(from: sample, type: type)
+            completion(metric)
         }
         healthStore.execute(query)
     }
-
-    private func fetchRestingHeartRate() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else { return }
-
-        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sortDescriptor]) { [weak self] _, results, error in
-            guard let sample = results?.first as? HKQuantitySample else { return }
-            let bpm = Int(sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
-            DispatchQueue.main.async {
-                self?.restingHeartRate = bpm
-            }
-        }
-        healthStore.execute(query)
+    
+    private func createMetric(from sample: HKQuantitySample, type: HKQuantityType) -> HealthMetric {
+        let identifier = type.identifier
+        let name = getReadableName(for: identifier)
+        let unit = getUnit(for: type)
+        let value = sample.quantity.doubleValue(for: unit)
+        let displayValue = formatValue(value, unit: unit, identifier: identifier)
+        let (icon, color) = getIconAndColor(for: identifier)
+        
+        return HealthMetric(
+            name: name,
+            value: displayValue,
+            icon: icon,
+            color: color,
+            identifier: identifier
+        )
     }
-
-    private func fetchSteps() {
-        guard let stepsType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
-
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
-
-        let query = HKStatisticsQuery(quantityType: stepsType, quantitySamplePredicate: predicate, options: .cumulativeSum) { [weak self] _, result, error in
-            guard let sum = result?.sumQuantity() else { return }
-            let steps = Int(sum.doubleValue(for: .count()))
-            DispatchQueue.main.async {
-                self?.steps = steps
-            }
-        }
-        healthStore.execute(query)
+    
+    private func getAllQuantityTypes() -> [HKQuantityType] {
+        let identifiers: [HKQuantityTypeIdentifier] = [
+            .stepCount, .distanceWalkingRunning, .distanceCycling, .distanceSwimming,
+            .heartRate, .restingHeartRate, .heartRateVariabilitySDNN,
+            .activeEnergyBurned, .basalEnergyBurned,
+            .flightsClimbed, .vo2Max,
+            .appleExerciseTime, .appleStandTime,
+            .respiratoryRate, .oxygenSaturation,
+            .bodyMass, .bodyMassIndex, .leanBodyMass, .bodyFatPercentage,
+            .runningSpeed, .runningPower, .runningStrideLength, .runningGroundContactTime, .runningVerticalOscillation,
+            .swimmingStrokeCount, .cyclingSpeed, .cyclingPower, .cyclingCadence,
+            .pushCount, .distanceWheelchair,
+            .nikeFuel, .appleWalkingSteadiness,
+            .sixMinuteWalkTestDistance, .stairAscentSpeed, .stairDescentSpeed,
+            .walkingSpeed, .walkingStepLength, .walkingAsymmetryPercentage, .walkingDoubleSupportPercentage
+        ]
+        
+        return identifiers.compactMap { HKQuantityType.quantityType(forIdentifier: $0) }
     }
-
-    private func fetchActiveCalories() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else { return }
-
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
-
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { [weak self] _, result, error in
-            guard let sum = result?.sumQuantity() else { return }
-            let cal = Int(sum.doubleValue(for: .kilocalorie()))
-            DispatchQueue.main.async {
-                self?.activeCalories = cal
-            }
-        }
-        healthStore.execute(query)
+    
+    private func getAllCategoryTypes() -> [HKCategoryType] {
+        let identifiers: [HKCategoryTypeIdentifier] = [
+            .sleepAnalysis, .appleStandHour, .mindfulSession
+        ]
+        
+        return identifiers.compactMap { HKCategoryType.categoryType(forIdentifier: $0) }
     }
-
-    private func fetchDistance() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) else { return }
-
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
-
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { [weak self] _, result, error in
-            guard let sum = result?.sumQuantity() else { return }
-            let km = sum.doubleValue(for: .meterUnit(with: .kilo))
-            DispatchQueue.main.async {
-                self?.distance = String(format: "%.1fk", km)
-            }
+    
+    private func getUnit(for type: HKQuantityType) -> HKUnit {
+        switch type.identifier {
+        case HKQuantityTypeIdentifier.stepCount.rawValue,
+             HKQuantityTypeIdentifier.flightsClimbed.rawValue,
+             HKQuantityTypeIdentifier.pushCount.rawValue,
+             HKQuantityTypeIdentifier.swimmingStrokeCount.rawValue:
+            return .count()
+            
+        case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue,
+             HKQuantityTypeIdentifier.distanceCycling.rawValue,
+             HKQuantityTypeIdentifier.distanceSwimming.rawValue,
+             HKQuantityTypeIdentifier.distanceWheelchair.rawValue,
+             HKQuantityTypeIdentifier.sixMinuteWalkTestDistance.rawValue:
+            return .meterUnit(with: .kilo)
+            
+        case HKQuantityTypeIdentifier.heartRate.rawValue,
+             HKQuantityTypeIdentifier.restingHeartRate.rawValue,
+             HKQuantityTypeIdentifier.respiratoryRate.rawValue:
+            return HKUnit.count().unitDivided(by: .minute())
+            
+        case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue,
+             HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
+            return .kilocalorie()
+            
+        case HKQuantityTypeIdentifier.runningPower.rawValue,
+             HKQuantityTypeIdentifier.cyclingPower.rawValue:
+            return .watt()
+            
+        case HKQuantityTypeIdentifier.runningSpeed.rawValue,
+             HKQuantityTypeIdentifier.cyclingSpeed.rawValue,
+             HKQuantityTypeIdentifier.walkingSpeed.rawValue,
+             HKQuantityTypeIdentifier.stairAscentSpeed.rawValue,
+             HKQuantityTypeIdentifier.stairDescentSpeed.rawValue:
+            return HKUnit.meter().unitDivided(by: .second())
+            
+        case HKQuantityTypeIdentifier.bodyMass.rawValue,
+             HKQuantityTypeIdentifier.leanBodyMass.rawValue:
+            return .gramUnit(with: .kilo)
+            
+        case HKQuantityTypeIdentifier.oxygenSaturation.rawValue,
+             HKQuantityTypeIdentifier.bodyFatPercentage.rawValue,
+             HKQuantityTypeIdentifier.walkingAsymmetryPercentage.rawValue,
+             HKQuantityTypeIdentifier.walkingDoubleSupportPercentage.rawValue:
+            return .percent()
+            
+        default:
+            return .count()
         }
-        healthStore.execute(query)
     }
-
-    private func fetchFlightsClimbed() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .flightsClimbed) else { return }
-
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
-
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { [weak self] _, result, error in
-            guard let sum = result?.sumQuantity() else { return }
-            let flights = Int(sum.doubleValue(for: .count()))
-            DispatchQueue.main.async {
-                self?.flightsClimbed = flights
-            }
+    
+    private func formatValue(_ value: Double, unit: HKUnit, identifier: String) -> String {
+        if unit == .meterUnit(with: .kilo) {
+            return String(format: "%.1fk", value)
+        } else if unit == .percent() {
+            return String(format: "%.0f%%", value * 100)
+        } else if unit == .watt() {
+            return String(format: "%.0fW", value)
+        } else if unit == HKUnit.meter().unitDivided(by: .second()) {
+            return String(format: "%.1fm/s", value)
+        } else {
+            return String(format: "%.0f", value)
         }
-        healthStore.execute(query)
     }
-
-    private func fetchVO2Max() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .vo2Max) else { return }
-
-        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sortDescriptor]) { [weak self] _, results, error in
-            guard let sample = results?.first as? HKQuantitySample else { return }
-            let vo2 = Int(sample.quantity.doubleValue(for: HKUnit.literUnit(with: .milli).unitDivided(by: .gramUnit(with: .kilo).unitMultiplied(by: .minute()))))
-            DispatchQueue.main.async {
-                self?.vo2Max = vo2
-            }
-        }
-        healthStore.execute(query)
+    
+    private func getReadableName(for identifier: String) -> String {
+        let mapping: [String: String] = [
+            HKQuantityTypeIdentifier.stepCount.rawValue: "Steps",
+            HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue: "Walk/Run",
+            HKQuantityTypeIdentifier.distanceCycling.rawValue: "Cycling",
+            HKQuantityTypeIdentifier.distanceSwimming.rawValue: "Swimming",
+            HKQuantityTypeIdentifier.heartRate.rawValue: "Heart",
+            HKQuantityTypeIdentifier.restingHeartRate.rawValue: "Resting HR",
+            HKQuantityTypeIdentifier.activeEnergyBurned.rawValue: "Calories",
+            HKQuantityTypeIdentifier.flightsClimbed.rawValue: "Flights",
+            HKQuantityTypeIdentifier.vo2Max.rawValue: "VO2 Max",
+            HKQuantityTypeIdentifier.appleExerciseTime.rawValue: "Exercise",
+            HKQuantityTypeIdentifier.respiratoryRate.rawValue: "Respiratory",
+            HKQuantityTypeIdentifier.runningPower.rawValue: "Run Power",
+            HKQuantityTypeIdentifier.runningSpeed.rawValue: "Run Speed",
+            HKQuantityTypeIdentifier.swimmingStrokeCount.rawValue: "Swim Strokes",
+            HKQuantityTypeIdentifier.cyclingPower.rawValue: "Cycle Power",
+            HKQuantityTypeIdentifier.bodyMass.rawValue: "Weight",
+            HKQuantityTypeIdentifier.oxygenSaturation.rawValue: "O2 Sat"
+        ]
+        
+        return mapping[identifier] ?? identifier.replacingOccurrences(of: "HKQuantityTypeIdentifier", with: "")
     }
-
-    private func fetchWorkoutMinutes() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .appleExerciseTime) else { return }
-
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
-
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { [weak self] _, result, error in
-            guard let sum = result?.sumQuantity() else { return }
-            let minutes = Int(sum.doubleValue(for: .minute()))
-            DispatchQueue.main.async {
-                self?.workoutMinutes = minutes
-            }
-        }
-        healthStore.execute(query)
+    
+    private func getIconAndColor(for identifier: String) -> (String, String) {
+        let mapping: [String: (String, String)] = [
+            HKQuantityTypeIdentifier.stepCount.rawValue: ("figure.walk", "green"),
+            HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue: ("figure.run", "cyan"),
+            HKQuantityTypeIdentifier.distanceCycling.rawValue: ("bicycle", "blue"),
+            HKQuantityTypeIdentifier.distanceSwimming.rawValue: ("figure.pool.swim", "teal"),
+            HKQuantityTypeIdentifier.heartRate.rawValue: ("heart.fill", "red"),
+            HKQuantityTypeIdentifier.restingHeartRate.rawValue: ("heart.circle", "pink"),
+            HKQuantityTypeIdentifier.activeEnergyBurned.rawValue: ("flame.fill", "orange"),
+            HKQuantityTypeIdentifier.flightsClimbed.rawValue: ("stairs", "purple"),
+            HKQuantityTypeIdentifier.vo2Max.rawValue: ("lungs.fill", "blue"),
+            HKQuantityTypeIdentifier.appleExerciseTime.rawValue: ("bolt.fill", "yellow"),
+            HKQuantityTypeIdentifier.respiratoryRate.rawValue: ("wind", "teal"),
+            HKQuantityTypeIdentifier.runningPower.rawValue: ("bolt.heart", "orange"),
+            HKQuantityTypeIdentifier.runningSpeed.rawValue: ("gauge", "cyan"),
+            HKQuantityTypeIdentifier.swimmingStrokeCount.rawValue: ("water.waves", "blue"),
+            HKQuantityTypeIdentifier.cyclingPower.rawValue: ("bolt.circle", "yellow"),
+            HKQuantityTypeIdentifier.bodyMass.rawValue: ("scalemass", "indigo"),
+            HKQuantityTypeIdentifier.oxygenSaturation.rawValue: ("waveform.path.ecg", "red")
+        ]
+        
+        return mapping[identifier] ?? ("circle.fill", "gray")
     }
+}
 
-    private func fetchSleep() {
-        guard let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) else { return }
-
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
-
-        let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { [weak self] _, results, error in
-            guard let samples = results as? [HKCategorySample] else { return }
-
-            let totalSeconds = samples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
-            let hours = totalSeconds / 3600
-
-            DispatchQueue.main.async {
-                self?.sleepHours = String(format: "%.1fh", hours)
-            }
-        }
-        healthStore.execute(query)
-    }
-
-    private func fetchRespiratoryRate() {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .respiratoryRate) else { return }
-
-        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sortDescriptor]) { [weak self] _, results, error in
-            guard let sample = results?.first as? HKQuantitySample else { return }
-            let rate = Int(sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
-            DispatchQueue.main.async {
-                self?.respiratoryRate = rate
-            }
-        }
-        healthStore.execute(query)
-    }
+struct HealthMetric: Identifiable {
+    let id = UUID()
+    let name: String
+    let value: String
+    let icon: String
+    let color: String
+    let identifier: String
 }

@@ -1,45 +1,39 @@
-//
-//  Checkin.swift
-//  cheakin
-//
-//  Created by Arnav Gupta on 9/29/25.
-//
-
 import SwiftUI
+import UIKit
 
 @main
 struct CheckinApp: App {
-  init() {
-         let appearance = UITabBarAppearance()
-
-         // 1. Configure the tab bar to be fully transparent
-         appearance.configureWithTransparentBackground()
-
-         // 2. Remove any blur or background effects
-         appearance.backgroundEffect = nil
-
-         // 3. Set a transparent background color
-         appearance.backgroundColor = UIColor.clear
-
-         // Apply this appearance to the tab bar
-         UITabBar.appearance().standardAppearance = appearance
-         UITabBar.appearance().scrollEdgeAppearance = appearance
-     }
+    @StateObject private var healthManager = HealthKitManager()
+    @StateObject private var locationManager = LocationManager()
+    @StateObject private var contactsManager = ContactsManager()
+    
+    @MainActor init() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundEffect = nil
+        appearance.backgroundColor = UIColor.clear
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
 
     var body: some Scene {
         WindowGroup {
             TabView {
                 HomeView()
+                    .environmentObject(healthManager)
                     .tabItem {
                         Image(systemName: "house")
                     }
 
                 MapView()
+                    .environmentObject(locationManager)
                     .tabItem {
                         Image(systemName: "map")
                     }
 
                 ContactsView()
+                    .environmentObject(contactsManager)
+                    .environmentObject(healthManager)
                     .tabItem {
                         Image(systemName: "person.2")
                     }
@@ -53,6 +47,11 @@ struct CheckinApp: App {
                     .tabItem {
                         Image(systemName: "gearshape")
                     }
+            }
+            .onAppear {
+                healthManager.requestAuthorization()
+                locationManager.requestPermission()
+                contactsManager.requestAccess()
             }
         }
     }
