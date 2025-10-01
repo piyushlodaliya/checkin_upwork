@@ -95,37 +95,27 @@ struct OptimizedLottieView: View {
             if isLoaded && isVisible {
                 LottieView(animation: .named(animationName))
                     .playing(loopMode: shouldPlay ? .playOnce : .repeat(1))
-                    .onAppear {
-                        if shouldPlay {
-                            // Schedule next animation after current one finishes
-                            scheduleNextAnimation()
-                        }
+                    .onTapGesture {
+                        shouldPlay = true
                     }
             } else {
                 // Static placeholder while not loaded
                 Image(systemName: "face.smiling")
                     .font(.system(size: 30))
                     .foregroundColor(.gray.opacity(0.3))
+                    .onTapGesture {
+                        if isVisible && !isLoaded {
+                            isLoaded = true
+                            shouldPlay = true
+                        }
+                    }
             }
         }
         .onAppear {
             if isVisible && !isLoaded {
                 isLoaded = true
-                // Start first animation after a random delay
-                let initialDelay = Double.random(in: 1...3)
-                DispatchQueue.main.asyncAfter(deadline: .now() + initialDelay) {
-                    shouldPlay = true
-                }
             }
         }
-    }
-    
-    private func scheduleNextAnimation() {
-        let delay = Double.random(in: 10...15)
-        let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
-            shouldPlay = true
-        }
-        onTimerSetup(timer)
     }
 }
 

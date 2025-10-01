@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import Combine
+import Supabase
 
 class HealthKitManager: ObservableObject {
     let healthStore = HKHealthStore()
@@ -83,6 +84,8 @@ class HealthKitManager: ObservableObject {
         group.notify(queue: .main) {
             self.metrics = fetchedMetrics.sorted { $0.name < $1.name }
             print("✅ Total metrics fetched: \(self.metrics.count)")
+            // Sync to Supabase after fetching
+            self.syncHealthDataToSupabase()
         }
     }
     
@@ -320,6 +323,100 @@ class HealthKitManager: ObservableObject {
         
         return mapping[identifier] ?? ("circle.fill", "gray")
     }
+    
+    // MARK: - Supabase Sync
+    
+    func syncHealthDataToSupabase() {
+        guard let currentUser = SupabaseManager.shared.currentUser else {
+            print("❌ No authenticated user for health data sync")
+            return
+        }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        
+        print("🔄 Syncing health data to Supabase for user: \(currentUser.id)")
+        
+        Task {
+            do {
+                // Prepare health metrics for upload
+                var healthData: [HealthMetricRecord] = []
+                
+                for metric in metrics {
+                    let healthRecord = HealthMetricRecord(
+                        user_id: currentUser.id.uuidString,
+                        metric_type: metric.identifier,
+                        value: metric.value,
+                        unit: getUnitString(for: metric.identifier),
+                        recorded_at: ISO8601DateFormatter().string(from: now)
+                    )
+                    healthData.append(healthRecord)
+                }
+                
+                // Insert into Supabase
+                let response = try await SupabaseManager.shared.client
+                    .from("health_metrics")
+                    .insert(healthData)
+                    .execute()
+                
+                print("✅ Successfully synced \(healthData.count) health metrics to Supabase")
+                
+            } catch {
+                print("❌ Error syncing health data to Supabase: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func getUnitString(for identifier: String) -> String {
+        switch identifier {
+        case HKQuantityTypeIdentifier.stepCount.rawValue,
+             HKQuantityTypeIdentifier.flightsClimbed.rawValue,
+             HKQuantityTypeIdentifier.pushCount.rawValue,
+             HKQuantityTypeIdentifier.swimmingStrokeCount.rawValue:
+            return "count"
+            
+        case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue,
+             HKQuantityTypeIdentifier.distanceCycling.rawValue,
+             HKQuantityTypeIdentifier.distanceSwimming.rawValue,
+             HKQuantityTypeIdentifier.distanceWheelchair.rawValue,
+             HKQuantityTypeIdentifier.sixMinuteWalkTestDistance.rawValue:
+            return "km"
+            
+        case HKQuantityTypeIdentifier.heartRate.rawValue,
+             HKQuantityTypeIdentifier.restingHeartRate.rawValue,
+             HKQuantityTypeIdentifier.respiratoryRate.rawValue:
+            return "bpm"
+            
+        case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue,
+             HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
+            return "kcal"
+            
+        case HKQuantityTypeIdentifier.runningPower.rawValue,
+             HKQuantityTypeIdentifier.cyclingPower.rawValue:
+            return "watts"
+            
+        case HKQuantityTypeIdentifier.runningSpeed.rawValue,
+             HKQuantityTypeIdentifier.cyclingSpeed.rawValue,
+             HKQuantityTypeIdentifier.walkingSpeed.rawValue,
+             HKQuantityTypeIdentifier.stairAscentSpeed.rawValue,
+             HKQuantityTypeIdentifier.stairDescentSpeed.rawValue:
+            return "m/s"
+            
+        case HKQuantityTypeIdentifier.bodyMass.rawValue,
+             HKQuantityTypeIdentifier.leanBodyMass.rawValue:
+            return "kg"
+            
+        case HKQuantityTypeIdentifier.oxygenSaturation.rawValue,
+             HKQuantityTypeIdentifier.bodyFatPercentage.rawValue,
+             HKQuantityTypeIdentifier.walkingAsymmetryPercentage.rawValue,
+             HKQuantityTypeIdentifier.walkingDoubleSupportPercentage.rawValue:
+            return "%"
+            
+        default:
+            return "count"
+        }
+    }
 }
 
 struct HealthMetric: Identifiable {
@@ -329,4 +426,12 @@ struct HealthMetric: Identifiable {
     let icon: String
     let color: String
     let identifier: String
+}
+
+struct HealthMetricRecord: Codable {
+    let user_id: String
+    let metric_type: String
+    let value: String
+    let unit: String
+    let recorded_at: String
 }

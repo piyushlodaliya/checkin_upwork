@@ -12,6 +12,7 @@ struct ContactDetailView: View {
     let contact: Contact
     @EnvironmentObject var healthManager: HealthKitManager
     @State private var isVisible = false
+    @State private var shouldPlayAnimation = false
 
     var body: some View {
         ScrollView {
@@ -20,9 +21,12 @@ struct ContactDetailView: View {
                 HStack(spacing: 16) {
                     if isVisible {
                         LottieView(animation: .named(contact.emotion))
-                            .playing(loopMode: .playOnce)
+                            .playing(loopMode: shouldPlayAnimation ? .playOnce : .repeat(1))
                             .frame(width: 60, height: 60)
                             .clipShape(Circle())
+                            .onTapGesture {
+                                shouldPlayAnimation = true
+                            }
                     } else {
                         // Static placeholder while not visible
                         Image(systemName: emotionToSFSymbol(contact.emotion))
