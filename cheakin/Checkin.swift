@@ -6,6 +6,7 @@ struct CheckinApp: App {
     @StateObject private var healthManager = HealthKitManager()
     @StateObject private var locationManager = LocationManager()
     @StateObject private var contactsManager = ContactsManager()
+    @StateObject private var supabaseManager = SupabaseManager.shared
     
     @MainActor init() {
         let appearance = UITabBarAppearance()
@@ -18,40 +19,49 @@ struct CheckinApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TabView {
-                HomeView()
-                    .environmentObject(healthManager)
-                    .tabItem {
-                        Image(systemName: "house")
-                    }
+            Group {
+                if supabaseManager.isAuthenticated {
+                    // Main App with Authentication
+                    TabView {
+                        HomeView()
+                            .environmentObject(healthManager)
+                            .tabItem {
+                                Image(systemName: "house")
+                            }
 
-                MapView()
-                    .environmentObject(locationManager)
-                    .tabItem {
-                        Image(systemName: "map")
-                    }
+                        MapView()
+                            .environmentObject(locationManager)
+                            .tabItem {
+                                Image(systemName: "map")
+                            }
 
-                ContactsView()
-                    .environmentObject(contactsManager)
-                    .environmentObject(healthManager)
-                    .tabItem {
-                        Image(systemName: "person.2")
-                    }
+                        ContactsView()
+                            .environmentObject(contactsManager)
+                            .environmentObject(healthManager)
+                            .tabItem {
+                                Image(systemName: "person.2")
+                            }
 
-                PublicView()
-                    .tabItem {
-                        Image(systemName: "globe")
-                    }
+                        PublicView()
+                            .tabItem {
+                                Image(systemName: "globe")
+                            }
 
-                SettingsView()
-                    .tabItem {
-                        Image(systemName: "gearshape")
+                        SettingsView()
+                            .tabItem {
+                                Image(systemName: "gearshape")
+                            }
                     }
-            }
-            .onAppear {
-                healthManager.requestAuthorization()
-                locationManager.requestPermission()
-                contactsManager.requestAccess()
+                    .onAppear {
+                        healthManager.requestAuthorization()
+                        locationManager.requestPermission()
+                        contactsManager.requestAccess()
+                    }
+                } else {
+                    // Authentication Flow
+                    WelcomeView()
+                        .environmentObject(supabaseManager)
+                }
             }
         }
     }

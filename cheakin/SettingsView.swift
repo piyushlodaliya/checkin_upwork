@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import Auth
 
 struct SettingsView: View {
     @AppStorage("themeMode") private var themeMode = "light"
+    @EnvironmentObject var supabaseManager: SupabaseManager
 
     var body: some View {
         NavigationView {
@@ -54,6 +56,60 @@ struct SettingsView: View {
                             }
                         }
                         .padding(.horizontal)
+                    }
+                    
+                    // Account Section
+                    VStack(spacing: 12) {
+                        Text("account")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                        
+                        VStack(spacing: 8) {
+                            if let user = supabaseManager.currentUser {
+                                HStack {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.blue)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Signed in as")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.secondary)
+                                        Text(user.email ?? "Unknown")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.primary)
+                                    }
+                                    
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                                .padding(.horizontal)
+                            }
+                            
+                            Button(action: {
+                                Task {
+                                    await supabaseManager.signOut()
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                        .font(.system(size: 16))
+                                    Text("Sign Out")
+                                        .font(.system(size: 16, weight: .medium))
+                                }
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(12)
+                            }
+                            .padding(.horizontal)
+                        }
                     }
 
                     Spacer()
