@@ -10,20 +10,23 @@ struct ContactsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Header with proper spacing
                 HStack {
                     NavigationLink {
                         DiscoverContactsView()
                             .environmentObject(contactsManager)
                     } label: {
                         Image(systemName: "person.badge.plus")
-                            .font(.system(size: 20))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(.blue)
-                            .padding(8)
+                            .frame(width: 32, height: 32)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
                     }
                     
                     Spacer()
                     
-                    HStack(spacing: 12) {
+                    HStack(spacing: 8) {
                         TabButton(title: "Followers", isSelected: selectedTab == 0) {
                             selectedTab = 0
                         }
@@ -34,21 +37,32 @@ struct ContactsView: View {
                     
                     Spacer()
                     
-                    Color.clear.frame(width: 36)
+                    Color.clear.frame(width: 32)
                 }
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
 
-                ScrollView {
-                    VStack(spacing: 8) {
-                        if contactsManager.contacts.isEmpty {
-                            Text("No contacts yet\nTap + to discover people")
-                                .font(.system(size: 16))
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 40)
-                        } else {
+                // Content with proper spacing
+                if contactsManager.contacts.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.2.circle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray.opacity(0.5))
+                        
+                        Text("No contacts yet")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.primary)
+                        
+                        Text("Tap + to discover people")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 60)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
                             ForEach(contactsManager.contacts) { contact in
                                 NavigationLink {
                                     ContactDetailView(contact: contact)
@@ -56,11 +70,13 @@ struct ContactsView: View {
                                 } label: {
                                     ContactRow(contact: contact)
                                 }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .padding(.bottom, 100)
                     }
-                    .padding(.horizontal)
-                    Spacer(minLength: 100)
                 }
             }
             .navigationBarHidden(true)
@@ -141,21 +157,34 @@ struct ContactRow: View {
     let contact: Contact
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             LottieView(animation: .named(contact.emotion))
                 .playing(loopMode: .loop)
-                .frame(width: 50, height: 50)
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
 
-            Text(contact.name)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(contact.name)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.primary)
+                
+                Text("Active now")
+                    .font(.system(size: 12))
+                    .foregroundColor(.green)
+            }
 
             Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.gray.opacity(0.6))
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemGray6))
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         )
     }
 }
@@ -165,14 +194,21 @@ struct ContactRowWithButton: View {
     @EnvironmentObject var contactsManager: ContactsManager
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             LottieView(animation: .named(contact.emotion))
                 .playing(loopMode: .loop)
-                .frame(width: 50, height: 50)
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
 
-            Text(contact.name)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(contact.name)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.primary)
+                
+                Text("Tap to follow")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+            }
 
             Spacer()
             
@@ -180,20 +216,22 @@ struct ContactRowWithButton: View {
                 contactsManager.toggleContact(contact)
             }) {
                 Text(contactsManager.isFollowing(contact) ? "Following" : "Follow")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(contactsManager.isFollowing(contact) ? .gray : .white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
                     .background(
                         Capsule()
                             .fill(contactsManager.isFollowing(contact) ? Color(.systemGray5) : Color.blue)
                     )
             }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemGray6))
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         )
     }
 }

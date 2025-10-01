@@ -108,7 +108,10 @@ class HealthKitManager: ObservableObject {
         
         let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
             if let error = error {
-                print("❌ Error fetching cumulative \(type.identifier): \(error.localizedDescription)")
+                // Only log actual errors, not "no data available" which is normal
+                if !error.localizedDescription.contains("No data available") {
+                    print("❌ Error fetching cumulative \(type.identifier): \(error.localizedDescription)")
+                }
                 completion(nil)
                 return
             }
