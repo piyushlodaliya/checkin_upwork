@@ -158,9 +158,12 @@ struct ContactRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            LottieView(animation: .named(contact.emotion))
-                .playing(loopMode: .loop)
+            // Static SF Symbol instead of Lottie animation for performance
+            Image(systemName: emotionToSFSymbol(contact.emotion))
+                .font(.system(size: 24))
+                .foregroundColor(.blue)
                 .frame(width: 44, height: 44)
+                .background(Color.blue.opacity(0.1))
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
@@ -195,9 +198,12 @@ struct ContactRowWithButton: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            LottieView(animation: .named(contact.emotion))
-                .playing(loopMode: .loop)
+            // Static SF Symbol instead of Lottie animation for performance
+            Image(systemName: emotionToSFSymbol(contact.emotion))
+                .font(.system(size: 24))
+                .foregroundColor(.blue)
                 .frame(width: 44, height: 44)
+                .background(Color.blue.opacity(0.1))
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
@@ -241,6 +247,28 @@ struct Contact: Identifiable {
     let name: String
     let emotion: String
     let profileColor: String
+}
+
+// Helper function to map emotion names to SF Symbols
+func emotionToSFSymbol(_ emotion: String) -> String {
+    switch emotion {
+    case "happy-cry":
+        return "face.smiling"
+    case "angry":
+        return "face.dashed"
+    case "cold-face":
+        return "snowflake"
+    case "crying":
+        return "cloud.rain"
+    case "flushed":
+        return "flame"
+    case "gasp":
+        return "exclamationmark.circle"
+    case "grimacing":
+        return "face.dashed.fill"
+    default:
+        return "face.smiling"
+    }
 }
 
 #Preview {

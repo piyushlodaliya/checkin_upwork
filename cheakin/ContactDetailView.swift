@@ -11,15 +11,42 @@ import Lottie
 struct ContactDetailView: View {
     let contact: Contact
     @EnvironmentObject var healthManager: HealthKitManager
+    @State private var isVisible = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                Text(contact.name)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                // Contact header with optimized animation
+                HStack(spacing: 16) {
+                    if isVisible {
+                        LottieView(animation: .named(contact.emotion))
+                            .playing(loopMode: .playOnce)
+                            .frame(width: 60, height: 60)
+                            .clipShape(Circle())
+                    } else {
+                        // Static placeholder while not visible
+                        Image(systemName: emotionToSFSymbol(contact.emotion))
+                            .font(.system(size: 30))
+                            .foregroundColor(.blue)
+                            .frame(width: 60, height: 60)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(contact.name)
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+                        
+                        Text("Active now")
+                            .font(.system(size: 14))
+                            .foregroundColor(.green)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
 
                 EmotionalTimeline()
 
@@ -32,6 +59,12 @@ struct ContactDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            isVisible = true
+        }
+        .onDisappear {
+            isVisible = false
+        }
     }
 }
 

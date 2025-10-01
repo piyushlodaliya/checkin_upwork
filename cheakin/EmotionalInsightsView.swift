@@ -32,9 +32,13 @@ struct EmotionalInsightsView: View {
                                     .font(.system(size: 18, weight: .bold, design: .rounded))
                                     .foregroundColor(.primary.opacity(0.6))
 
-                                LottieView(animation: .named(log.emotion))
-                                    .playing(loopMode: .loop)
+                                // Static SF Symbol instead of Lottie animation for performance
+                                Image(systemName: emotionToSFSymbol(log.emotion))
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.blue)
                                     .frame(width: 60, height: 60)
+                                    .background(Color.blue.opacity(0.1))
+                                    .clipShape(Circle())
                             }
                             .frame(width: 70)
 
