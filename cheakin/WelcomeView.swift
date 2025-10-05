@@ -3,6 +3,7 @@ import SwiftUI
 struct WelcomeView: View {
     @State private var showingSignUp = false
     @State private var showingLogin = false
+    @EnvironmentObject var supabaseManager: SupabaseManager
     
     var body: some View {
         NavigationStack {
@@ -52,6 +53,19 @@ struct WelcomeView: View {
                             .background(Color.blue.opacity(0.1))
                             .cornerRadius(12)
                     }
+                    
+                    // Skip Login Button
+                    Button(action: {
+                        supabaseManager.skipLogin()
+                    }) {
+                        Text("Skip Login")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                    }
                 }
                 .padding(.horizontal, 32)
                 
@@ -69,4 +83,5 @@ struct WelcomeView: View {
 
 #Preview {
     WelcomeView()
+        .environmentObject(SupabaseManager.shared)
 }

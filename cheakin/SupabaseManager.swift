@@ -123,4 +123,21 @@ class SupabaseManager: ObservableObject {
             }
         }
     }
+    
+    func skipLogin() {
+        // Create a mock user for skip login functionality
+        let mockUser = User(
+            id: UUID(),
+            appMetadata: [:],
+            userMetadata: [:],
+            aud: "authenticated",
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        
+        DispatchQueue.main.async {
+            self.currentUser = mockUser
+            self.isAuthenticated = true
+        }
+    }
 }
