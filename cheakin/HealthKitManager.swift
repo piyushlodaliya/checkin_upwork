@@ -170,10 +170,15 @@ class HealthKitManager: ObservableObject {
     private func createMetric(from sample: HKQuantitySample, type: HKQuantityType) -> HealthMetric {
         let identifier = type.identifier
         let name = getReadableName(for: identifier)
-        let unit = getUnit(for: type)
-        let value = sample.quantity.doubleValue(for: unit)
+//        let unit = getUnit(for: type)
+        
+        let quantity = sample.quantity
+        let unit = getCompatibleUnit(for: type, quantity: quantity)
+        
+        let value = quantity.doubleValue(for: unit)
         let displayValue = formatValue(value, unit: unit, identifier: identifier)
         let (icon, color) = getIconAndColor(for: identifier)
+        
         
         return HealthMetric(
             name: name,
@@ -182,6 +187,32 @@ class HealthKitManager: ObservableObject {
             color: color,
             identifier: identifier
         )
+    }
+    
+    func getCompatibleUnit(for type: HKQuantityType, quantity: HKQuantity) -> HKUnit {
+        let identifier = type.identifier
+        
+        if quantity.is(compatibleWith: .count()) {
+            return .count()
+        }
+        
+        if quantity.is(compatibleWith: .meter()) {
+            if Locale.current.usesMetricSystem {
+                return .meter()
+            } else {
+                return .mile()
+            }
+        }
+        
+        if quantity.is(compatibleWith: .kilocalorie()) {
+            return .kilocalorie()
+        }
+        
+        if quantity.is(compatibleWith: .minute()) {
+            return .minute()
+        }
+
+        return getUnit(for: type)
     }
     
     private func getAllQuantityTypes() -> [HKQuantityType] {
