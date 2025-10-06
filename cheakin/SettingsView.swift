@@ -77,7 +77,7 @@ struct SettingsView: View {
                                         Text("Signed in as")
                                             .font(.system(size: 12))
                                             .foregroundColor(.secondary)
-                                        Text(user.email ?? "Unknown")
+                                        Text(user.email ?? user.userMetadata["email"] as? String ?? "Guest User")
                                             .font(.system(size: 14, weight: .medium))
                                             .foregroundColor(.primary)
                                     }
@@ -166,4 +166,5 @@ struct ThemeCapsule: View {
 
 #Preview {
     SettingsView()
+        .environmentObject(SupabaseManager.shared)
 }

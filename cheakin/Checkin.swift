@@ -48,6 +48,7 @@ struct CheckinApp: App {
                             }
 
                         SettingsView()
+                            .environmentObject(supabaseManager)
                             .tabItem {
                                 Image(systemName: "gearshape")
                             }

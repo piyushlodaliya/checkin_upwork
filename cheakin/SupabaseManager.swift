@@ -129,7 +129,7 @@ class SupabaseManager: ObservableObject {
         let mockUser = User(
             id: UUID(),
             appMetadata: [:],
-            userMetadata: [:],
+            userMetadata: ["email": "guest@cheakin.app"],
             aud: "authenticated",
             createdAt: Date(),
             updatedAt: Date()
